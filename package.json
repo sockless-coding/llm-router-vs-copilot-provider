@@ -3,7 +3,7 @@
 	"displayName": "Sockless LLM Router",
 	"description": "Use models served by your local Sockless LLM Router as Copilot Chat models — point it at the router's API endpoint and models are discovered automatically, with no manual per-model setup.",
 	"version": "0.1.0",
-	"publisher": "sockless",
+	"publisher": "sockless-coding",
 	"private": true,
 	"repository": {
 		"type": "git",
