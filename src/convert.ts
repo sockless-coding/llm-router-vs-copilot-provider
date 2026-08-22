@@ -124,8 +124,8 @@ export function flattenMessageText(message: vscode.LanguageModelChatRequestMessa
 		.join('');
 }
 
-/** Builds the JSON body posted to `/v1/chat/completions`. */
-export function buildRequestBody(
+/** Builds the JSON body posted to `/v1/chat/completions` (the router's OpenAI-compatible protocol). */
+export function buildOpenAiRequestBody(
 	model: vscode.LanguageModelChatInformation,
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
 	options: vscode.ProvideLanguageModelChatResponseOptions

@@ -5,6 +5,9 @@ const CONFIG_SECTION = 'socklessLlmRouter';
 const SECRET_API_KEY = 'socklessLlmRouter.apiKey';
 export const DEFAULT_BASE_URL = 'http://localhost:5054';
 
+export type RouterProtocol = 'openai' | 'claude';
+const DEFAULT_PROTOCOL: RouterProtocol = 'openai';
+
 /**
  * Owns where the router's endpoint URL and API key are stored, and the one prompt flow used to
  * set them up. The URL lives in user settings (so it round-trips with settings sync); the API
@@ -21,6 +24,12 @@ export class RouterConfig {
 
 	private async setBaseUrl(value: string): Promise<void> {
 		await vscode.workspace.getConfiguration(CONFIG_SECTION).update('baseUrl', value, vscode.ConfigurationTarget.Global);
+	}
+
+	/** Which of the router's chat protocols to speak — see the `socklessLlmRouter.protocol` setting. */
+	getProtocol(): RouterProtocol {
+		const value = vscode.workspace.getConfiguration(CONFIG_SECTION).get<string>('protocol', DEFAULT_PROTOCOL);
+		return value === 'claude' ? 'claude' : 'openai';
 	}
 
 	async getApiKey(): Promise<string | undefined> {

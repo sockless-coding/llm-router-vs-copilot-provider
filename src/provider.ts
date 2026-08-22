@@ -1,7 +1,8 @@
 import * as vscode from 'vscode';
 import { RouterConfig } from './config';
 import { RouterApiError } from './routerClient';
-import { buildRequestBody, flattenMessageText, toChatInformation } from './convert';
+import { buildOpenAiRequestBody, flattenMessageText, toChatInformation } from './convert';
+import { buildClaudeRequestBody } from './convertClaude';
 
 /**
  * Bridges the Sockless LLM Router's OpenAI-compatible API to VS Code's chat model provider
@@ -64,8 +65,11 @@ export class SocklessRouterChatProvider implements vscode.LanguageModelChatProvi
 		token: vscode.CancellationToken
 	): Promise<void> {
 		const client = await this.config.createClient();
-		const requestBody = buildRequestBody(model, messages, options);
-		await client.streamChatCompletion(requestBody, progress, token);
+		if (this.config.getProtocol() === 'claude') {
+			await client.streamClaudeMessage(buildClaudeRequestBody(model, messages, options), progress, token);
+		} else {
+			await client.streamChatCompletion(buildOpenAiRequestBody(model, messages, options), progress, token);
+		}
 	}
 
 	async provideTokenCount(

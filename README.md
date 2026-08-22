@@ -13,7 +13,16 @@ To change the endpoint or key later, run **Sockless LLM Router: Configure Connec
 
 ## How model discovery works
 
-On connect, the extension calls the router's `GET /v1/models/capabilities` endpoint, which reports — per preset — context length, max output tokens, and whether tool calling / image input are supported. That's what lets VS Code populate the model picker without asking you to describe each model by hand. Chat requests are sent to `POST /v1/chat/completions`, the router's OpenAI-compatible streaming endpoint.
+On connect, the extension calls the router's `GET /v1/models/capabilities` endpoint, which reports — per preset — context length, max output tokens, and whether tool calling / image input are supported. That's what lets VS Code populate the model picker without asking you to describe each model by hand.
+
+## Protocol
+
+The router speaks two chat protocols side by side, and this extension can use either one — set **Sockless LLM Router: Protocol** (`socklessLlmRouter.protocol`) to:
+
+- `openai` (default) — `POST /v1/chat/completions`, the router's OpenAI-compatible endpoint.
+- `claude` — `POST /v1/messages`, the router's Anthropic-compatible endpoint.
+
+Both protocols expose the same presets with the same tool-calling and image-input support, so this is mainly for comparing behavior between the two or matching another Claude-protocol client talking to the same router.
 
 ## Requirements
 

@@ -47,6 +47,16 @@
 					"type": "string",
 					"default": "http://localhost:5054",
 					"markdownDescription": "Base URL of the Sockless LLM Router **API** endpoint (not the admin web UI port). The API key, if required, is stored separately and securely — set it via **Sockless LLM Router: Configure Connection**."
+				},
+				"socklessLlmRouter.protocol": {
+					"type": "string",
+					"enum": ["openai", "claude"],
+					"enumDescriptions": [
+						"Speak the router's OpenAI-compatible protocol (POST /v1/chat/completions).",
+						"Speak the router's Anthropic-compatible protocol (POST /v1/messages)."
+					],
+					"default": "openai",
+					"markdownDescription": "Which of the router's chat protocols this extension uses to send requests. Both protocols expose the same presets and support the same tool calling / image input; switch if you're comparing behavior between the two or want parity with another Claude-protocol client talking to the same router."
 				}
 			}
 		}

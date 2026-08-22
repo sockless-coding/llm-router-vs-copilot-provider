@@ -24,7 +24,7 @@ interface PendingToolCall {
 	arguments: string;
 }
 
-/** Talks to the router's OpenAI-compatible `/v1` endpoints. One instance per request. */
+/** Talks to the router's `/v1` endpoints — both the OpenAI- and Anthropic-compatible protocols. */
 export class RouterClient {
 	constructor(private readonly baseUrl: string, private readonly apiKey: string | undefined) { }
 
@@ -44,14 +44,34 @@ export class RouterClient {
 		}
 	}
 
+	/** Streams a chat response over the router's OpenAI-compatible `/v1/chat/completions`. */
 	async streamChatCompletion(
 		requestBody: Record<string, unknown>,
 		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
 		token: vscode.CancellationToken
 	): Promise<void> {
+		await this.streamSse('/v1/chat/completions', requestBody, consumeOpenAiSse, progress, token);
+	}
+
+	/** Streams a chat response over the router's Anthropic-compatible `/v1/messages`. */
+	async streamClaudeMessage(
+		requestBody: Record<string, unknown>,
+		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+		token: vscode.CancellationToken
+	): Promise<void> {
+		await this.streamSse('/v1/messages', requestBody, consumeClaudeSse, progress, token);
+	}
+
+	private async streamSse(
+		path: string,
+		requestBody: Record<string, unknown>,
+		consume: (body: ReadableStream<Uint8Array>, progress: vscode.Progress<vscode.LanguageModelResponsePart>) => Promise<void>,
+		progress: vscode.Progress<vscode.LanguageModelResponsePart>,
+		token: vscode.CancellationToken
+	): Promise<void> {
 		const { signal, dispose } = bindCancellation(token);
 		try {
-			const response = await this.request('/v1/chat/completions', {
+			const response = await this.request(path, {
 				method: 'POST',
 				headers: { 'Content-Type': 'application/json' },
 				body: JSON.stringify(requestBody),
@@ -60,7 +80,7 @@ export class RouterClient {
 			if (!response.ok || !response.body) {
 				throw new RouterApiError(await describeError(response), response.status);
 			}
-			await consumeSse(response.body, progress);
+			await consume(response.body, progress);
 		} catch (err) {
 			if (token.isCancellationRequested) {
 				return;
@@ -110,28 +130,20 @@ async function describeError(response: Response): Promise<string> {
 	return `HTTP ${response.status} ${response.statusText}`;
 }
 
-/**
- * Reads the `/v1/chat/completions` SSE stream and reports parts as they complete. Text deltas are
- * reported immediately since VS Code can render them incrementally. Tool calls can't be: the
- * router streams each call's `arguments` as a partial JSON string across many chunks (standard
- * OpenAI streaming behavior), and {@link vscode.LanguageModelToolCallPart} needs a single parsed
- * object — so tool call fragments are accumulated by index and only reported once a chunk's
- * `finish_reason` shows the turn is complete.
- */
-async function consumeSse(
+/** Reads a `data: <json>` SSE stream, calling `onPayload` for each non-`[DONE]` line's JSON. */
+async function readDataLines(
 	body: ReadableStream<Uint8Array>,
-	progress: vscode.Progress<vscode.LanguageModelResponsePart>
+	onPayload: (payload: string) => 'continue' | 'done'
 ): Promise<void> {
 	const reader = body.getReader();
 	const decoder = new TextDecoder();
-	const pendingToolCalls = new Map<number, PendingToolCall>();
 	let buffer = '';
 
 	try {
 		while (true) {
 			const { done, value } = await reader.read();
 			if (done) {
-				break;
+				return;
 			}
 			buffer += decoder.decode(value, { stream: true });
 
@@ -143,20 +155,44 @@ async function consumeSse(
 					continue;
 				}
 				const payload = line.slice(5).trim();
-				if (payload === '[DONE]') {
-					flushToolCalls(pendingToolCalls, progress);
+				if (onPayload(payload) === 'done') {
 					return;
 				}
-				processChunk(payload, pendingToolCalls, progress);
 			}
 		}
-		flushToolCalls(pendingToolCalls, progress);
 	} finally {
 		reader.releaseLock();
 	}
 }
 
-function processChunk(
+/**
+ * Consumes the OpenAI-protocol `/v1/chat/completions` SSE stream. Text deltas are reported
+ * immediately since VS Code can render them incrementally. Tool calls can't be: the router
+ * streams each call's `arguments` as a partial JSON string across many chunks (standard OpenAI
+ * streaming behavior), and {@link vscode.LanguageModelToolCallPart} needs a single parsed object —
+ * so tool call fragments are accumulated by index and only reported once a chunk's `finish_reason`
+ * shows the turn is complete.
+ */
+async function consumeOpenAiSse(
+	body: ReadableStream<Uint8Array>,
+	progress: vscode.Progress<vscode.LanguageModelResponsePart>
+): Promise<void> {
+	const pendingToolCalls = new Map<number, PendingToolCall>();
+
+	await readDataLines(body, payload => {
+		if (payload === '[DONE]') {
+			flushOpenAiToolCalls(pendingToolCalls, progress);
+			return 'done';
+		}
+		processOpenAiChunk(payload, pendingToolCalls, progress);
+		return 'continue';
+	});
+
+	// Safety net in case a stream ends without a final finish_reason chunk or a [DONE] line.
+	flushOpenAiToolCalls(pendingToolCalls, progress);
+}
+
+function processOpenAiChunk(
 	payload: string,
 	pendingToolCalls: Map<number, PendingToolCall>,
 	progress: vscode.Progress<vscode.LanguageModelResponsePart>
@@ -194,11 +230,11 @@ function processChunk(
 	}
 
 	if (choice.finish_reason) {
-		flushToolCalls(pendingToolCalls, progress);
+		flushOpenAiToolCalls(pendingToolCalls, progress);
 	}
 }
 
-function flushToolCalls(
+function flushOpenAiToolCalls(
 	pendingToolCalls: Map<number, PendingToolCall>,
 	progress: vscode.Progress<vscode.LanguageModelResponsePart>
 ): void {
@@ -207,14 +243,77 @@ function flushToolCalls(
 	}
 	const ordered = [...pendingToolCalls.entries()].sort(([a], [b]) => a - b);
 	for (const [, call] of ordered) {
-		let input: object = {};
-		try {
-			input = call.arguments.trim().length > 0 ? JSON.parse(call.arguments) : {};
-		} catch {
-			// Malformed/truncated arguments — report the tool call with empty input rather than
-			// dropping it silently, so the caller at least knows a call was attempted.
-		}
-		progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, input));
+		reportToolCall(call, progress);
 	}
 	pendingToolCalls.clear();
+}
+
+/**
+ * Consumes the Anthropic-protocol `/v1/messages` SSE stream. Unlike the OpenAI protocol, a
+ * `tool_use` content block is explicitly closed by a `content_block_stop` event, so tool calls
+ * can be flushed as soon as their block closes instead of waiting for the whole turn to finish.
+ * `thinking_delta` events (extended reasoning) are intentionally not surfaced: there is no stable
+ * VS Code response part for reasoning content, the same limitation the OpenAI path has for
+ * `reasoning_content`.
+ */
+async function consumeClaudeSse(
+	body: ReadableStream<Uint8Array>,
+	progress: vscode.Progress<vscode.LanguageModelResponsePart>
+): Promise<void> {
+	const pendingToolBlocks = new Map<number, PendingToolCall>();
+
+	await readDataLines(body, payload => {
+		let event: any;
+		try {
+			event = JSON.parse(payload);
+		} catch {
+			return 'continue';
+		}
+
+		switch (event.type) {
+			case 'content_block_start': {
+				const block = event.content_block;
+				if (block?.type === 'tool_use') {
+					pendingToolBlocks.set(event.index, { id: block.id ?? '', name: block.name ?? '', arguments: '' });
+				}
+				break;
+			}
+			case 'content_block_delta': {
+				const delta = event.delta ?? {};
+				if (delta.type === 'text_delta' && typeof delta.text === 'string' && delta.text.length > 0) {
+					progress.report(new vscode.LanguageModelTextPart(delta.text));
+				} else if (delta.type === 'input_json_delta') {
+					const pending = pendingToolBlocks.get(event.index);
+					if (pending) {
+						pending.arguments += delta.partial_json ?? '';
+					}
+				}
+				break;
+			}
+			case 'content_block_stop': {
+				const pending = pendingToolBlocks.get(event.index);
+				if (pending) {
+					reportToolCall(pending, progress);
+					pendingToolBlocks.delete(event.index);
+				}
+				break;
+			}
+			case 'message_stop':
+				return 'done';
+			default:
+				break;
+		}
+		return 'continue';
+	});
+}
+
+function reportToolCall(call: PendingToolCall, progress: vscode.Progress<vscode.LanguageModelResponsePart>): void {
+	let input: object = {};
+	try {
+		input = call.arguments.trim().length > 0 ? JSON.parse(call.arguments) : {};
+	} catch {
+		// Malformed/truncated arguments — report the tool call with empty input rather than
+		// dropping it silently, so the caller at least knows a call was attempted.
+	}
+	progress.report(new vscode.LanguageModelToolCallPart(call.id, call.name, input));
 }
