@@ -1,0 +1,66 @@
+{
+	"name": "sockless-llm-router-copilot-provider",
+	"displayName": "Sockless LLM Router",
+	"description": "Use models served by your local Sockless LLM Router as Copilot Chat models — point it at the router's API endpoint and models are discovered automatically, with no manual per-model setup.",
+	"version": "0.1.0",
+	"publisher": "sockless",
+	"private": true,
+	"repository": {
+		"type": "git",
+		"url": "https://github.com/sockless-coding/llm-router-vs-copilot-provider.git"
+	},
+	"icon": "images/icon.png",
+	"engines": {
+		"vscode": "^1.104.0"
+	},
+	"categories": [
+		"AI",
+		"Chat"
+	],
+	"keywords": [
+		"copilot",
+		"llm",
+		"llama.cpp",
+		"language model",
+		"chat provider"
+	],
+	"main": "./out/extension.js",
+	"contributes": {
+		"languageModelChatProviders": [
+			{
+				"vendor": "sockless-llm-router",
+				"displayName": "Sockless LLM Router",
+				"managementCommand": "socklessLlmRouter.manage"
+			}
+		],
+		"commands": [
+			{
+				"command": "socklessLlmRouter.manage",
+				"title": "Configure Connection",
+				"category": "Sockless LLM Router"
+			}
+		],
+		"configuration": {
+			"title": "Sockless LLM Router",
+			"properties": {
+				"socklessLlmRouter.baseUrl": {
+					"type": "string",
+					"default": "http://localhost:5054",
+					"markdownDescription": "Base URL of the Sockless LLM Router **API** endpoint (not the admin web UI port). The API key, if required, is stored separately and securely — set it via **Sockless LLM Router: Configure Connection**."
+				}
+			}
+		}
+	},
+	"scripts": {
+		"vscode:prepublish": "npm run compile",
+		"compile": "tsc -p ./",
+		"watch": "tsc -watch -p ./",
+		"package": "vsce package"
+	},
+	"devDependencies": {
+		"@types/node": "^22.x",
+		"@types/vscode": "^1.104.0",
+		"@vscode/vsce": "^3.9.2",
+		"typescript": "^5.9.2"
+	}
+}
