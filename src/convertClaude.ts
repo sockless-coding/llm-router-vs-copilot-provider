@@ -97,6 +97,9 @@ export function buildClaudeRequestBody(
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
 	options: vscode.ProvideLanguageModelChatResponseOptions
 ): Record<string, unknown> {
+	// Reasoning effort isn't forwarded here: the router's /v1/messages passes `thinking` straight
+	// through to the backend's Anthropic-compatible endpoint rather than translating a
+	// `reasoning_effort`-style level, so there's nothing meaningful to send yet on this protocol.
 	const body: Record<string, unknown> = {
 		...options.modelOptions,
 		model: model.id,

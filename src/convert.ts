@@ -124,11 +124,18 @@ export function flattenMessageText(message: vscode.LanguageModelChatRequestMessa
 		.join('');
 }
 
-/** Builds the JSON body posted to `/v1/chat/completions` (the router's OpenAI-compatible protocol). */
+/**
+ * Builds the JSON body posted to `/v1/chat/completions` (the router's OpenAI-compatible protocol).
+ * `reasoningEffort` — resolved by the caller from the status bar's global effort picker against
+ * this model's own `reasoning_effort_options` — is forwarded as `reasoning_effort`, overriding the
+ * preset's own `--reasoning-effort` launch default for this request only. Omitted entirely for a
+ * model that doesn't support it, so unrelated models are never affected by the global picker.
+ */
 export function buildOpenAiRequestBody(
 	model: vscode.LanguageModelChatInformation,
 	messages: readonly vscode.LanguageModelChatRequestMessage[],
-	options: vscode.ProvideLanguageModelChatResponseOptions
+	options: vscode.ProvideLanguageModelChatResponseOptions,
+	reasoningEffort?: string
 ): Record<string, unknown> {
 	const body: Record<string, unknown> = {
 		...options.modelOptions,
@@ -136,6 +143,9 @@ export function buildOpenAiRequestBody(
 		messages: toRouterMessages(messages),
 		stream: true
 	};
+	if (reasoningEffort) {
+		body.reasoning_effort = reasoningEffort;
+	}
 
 	if (options.tools && options.tools.length > 0) {
 		body.tools = options.tools.map(tool => ({
@@ -152,12 +162,25 @@ export function buildOpenAiRequestBody(
 	return body;
 }
 
-/** Maps a router model-capabilities entry to what VS Code needs to list it in the model picker. */
+/**
+ * Maps a router model-capabilities entry to what VS Code needs to list it in the model picker.
+ *
+ * Reasoning effort is deliberately NOT modeled as extra picker entries here (one preset used to
+ * become one row per effort level) — VS Code's model picker has no per-model "submenu" UI for
+ * BYOK providers the way it does for Copilot's own GPT-5/o-series models, so that just cluttered
+ * the picker with near-duplicate rows. Instead a preset that supports it gets one row, tagged
+ * "reasoning" in its detail text, and the effort level is chosen globally via the status bar item
+ * (see {@link SocklessRouterChatProvider}) and applied per-request in {@link buildOpenAiRequestBody}.
+ */
 export function toChatInformation(model: RouterModelCapability): vscode.LanguageModelChatInformation {
 	const contextLength = model.context_length > 0 ? model.context_length : 4096;
 	const maxOutputTokens = Math.max(1, Math.min(model.max_output_tokens || contextLength, contextLength - 1));
 	const maxInputTokens = Math.max(1, contextLength - maxOutputTokens);
-	const detail = [model.parameter_size, model.quantization].filter(Boolean).join(' · ');
+	const detailParts = [model.parameter_size, model.quantization];
+	if (model.supports_reasoning_effort) {
+		detailParts.push('reasoning');
+	}
+	const detail = detailParts.filter(Boolean).join(' · ');
 
 	return {
 		id: model.id,

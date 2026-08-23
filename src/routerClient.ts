@@ -9,6 +9,12 @@ export interface RouterModelCapability {
 	tool_calling: boolean;
 	parameter_size?: string;
 	quantization?: string;
+	/** Whether this preset's chat template reads a reasoning-effort-style variable. */
+	supports_reasoning_effort?: boolean;
+	/** The effort this preset is launched with by default, if configured. */
+	reasoning_effort?: string | null;
+	/** Discrete effort levels the chat template gates on, e.g. ["low", "medium", "high"]. */
+	reasoning_effort_options?: string[];
 }
 
 /** An error the router (or the network) surfaced, with a message already fit to show the user. */
