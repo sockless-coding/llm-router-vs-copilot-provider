@@ -12,10 +12,6 @@ Presets configured in the router's admin UI (`Presets`) show up automatically in
 
 ![Copilot model picker listing router presets](images/model-picker.png)
 
-Reasoning effort is set globally from the Command Palette or status bar, and only applied to presets that support it:
-
-![Reasoning effort quick pick](images/reasoning-effort.png)
-
 ## Setup
 
 1. Install the extension and run **Sockless LLM Router: Configure Connection** from the Command Palette (or open the Copilot model picker — it will prompt you the first time).
@@ -31,11 +27,15 @@ On connect, the extension calls the router's `GET /v1/models/capabilities` endpo
 
 ## Reasoning effort
 
-VS Code's model picker has no per-model "submenu" UI for a BYOK provider the way it does for Copilot's own GPT-5/o-series models — every entry `provideLanguageModelChatInformation` returns is just a flat, separate row in the picker. Rather than clutter the picker with a near-duplicate row per effort level, reasoning effort is a single global setting, shown and changed from the **Reasoning: …** status bar item (bottom right) — click it, or run **Sockless LLM Router: Set Reasoning Effort** from the Command Palette, to pick Auto/Low/Medium/High/XHigh.
+Presets that support reasoning effort get VS Code's built-in **Thinking Effort** control, the same one it shows for its own reasoning models. Select the model in Copilot Chat and a button showing the current level (e.g. **Medium**) appears next to the model name in the chat input; click it to pick another level. VS Code remembers the choice per model. The button is hidden when the chat view is too narrow, so widen it if you don't see it.
 
-The chosen level is sent as `reasoning_effort` on `/v1/chat/completions`, but only for a request to a preset the router reports as supporting it (`supports_reasoning_effort`) — it's silently omitted for any other model, so the one global setting never affects a model that doesn't understand it. A preset that does support it shows `reasoning` in its picker detail text as a hint.
+The levels offered are the preset's own `reasoning_effort_options` as reported by the router, and the default is the preset's `--reasoning-effort` launch default, so leaving it alone behaves like the preset's normal configuration. The chosen level is sent as `reasoning_effort` on `/v1/chat/completions`. Presets that don't support it have no effort control and never receive the field.
 
-This only applies to the `openai` protocol — the router doesn't yet translate a reasoning-effort level onto its `claude`-protocol `/v1/messages` path, so the setting has no effect while **Sockless LLM Router: Protocol** is `claude`.
+The control is only offered with the `openai` protocol. The router doesn't yet translate a reasoning-effort level on its `claude`-protocol `/v1/messages` path, so it's hidden while **Sockless LLM Router: Protocol** is `claude`.
+
+## Thinking output
+
+When a model streams its reasoning (`reasoning_content` on the OpenAI protocol, `thinking` blocks on the Claude protocol), it shows up in Copilot Chat's collapsible **Thinking** section instead of being discarded.
 
 ## Loaded models
 
@@ -53,7 +53,7 @@ Both protocols expose the same presets with the same tool-calling and image-inpu
 ## Requirements
 
 - A running Sockless LLM Router instance with at least one server preset configured.
-- VS Code 1.104 or newer (for the Language Model Chat Provider API).
+- VS Code 1.120 or newer (for the Thinking Effort control on extension-provided models).
 
 ## Links
 

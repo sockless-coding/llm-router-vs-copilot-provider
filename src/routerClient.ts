@@ -31,6 +31,21 @@ export class RouterApiError extends Error {
 	}
 }
 
+/**
+ * `vscode.LanguageModelThinkingPart` exists at runtime in current VS Code but is still typed only
+ * in an API proposal, so it's looked up dynamically; on an editor without it, reasoning is dropped
+ * as before instead of failing the request.
+ */
+type ThinkingPartConstructor = new (value: string) => vscode.LanguageModelResponsePart;
+const ThinkingPart = (vscode as unknown as { LanguageModelThinkingPart?: ThinkingPartConstructor }).LanguageModelThinkingPart;
+
+/** Streams reasoning into Copilot's collapsible "Thinking" section. */
+function reportThinking(text: unknown, progress: vscode.Progress<vscode.LanguageModelResponsePart>): void {
+	if (ThinkingPart && typeof text === 'string' && text.length > 0) {
+		progress.report(new ThinkingPart(text));
+	}
+}
+
 interface PendingToolCall {
 	id: string;
 	name: string;
@@ -179,8 +194,8 @@ async function readDataLines(
 }
 
 /**
- * Consumes the OpenAI-protocol `/v1/chat/completions` SSE stream. Text deltas are reported
- * immediately since VS Code can render them incrementally. Tool calls can't be: the router
+ * Consumes the OpenAI-protocol `/v1/chat/completions` SSE stream. Text and reasoning deltas are
+ * reported immediately since VS Code can render them incrementally. Tool calls can't be: the router
  * streams each call's `arguments` as a partial JSON string across many chunks (standard OpenAI
  * streaming behavior), and {@link vscode.LanguageModelToolCallPart} needs a single parsed object —
  * so tool call fragments are accumulated by index and only reported once a chunk's `finish_reason`
@@ -223,6 +238,8 @@ function processOpenAiChunk(
 	}
 
 	const delta = choice.delta ?? {};
+	// llama.cpp names it `reasoning_content`; some OpenAI-compatible servers use `reasoning`.
+	reportThinking(delta.reasoning_content ?? delta.reasoning, progress);
 	if (typeof delta.content === 'string' && delta.content.length > 0) {
 		progress.report(new vscode.LanguageModelTextPart(delta.content));
 	}
@@ -265,9 +282,7 @@ function flushOpenAiToolCalls(
  * Consumes the Anthropic-protocol `/v1/messages` SSE stream. Unlike the OpenAI protocol, a
  * `tool_use` content block is explicitly closed by a `content_block_stop` event, so tool calls
  * can be flushed as soon as their block closes instead of waiting for the whole turn to finish.
- * `thinking_delta` events (extended reasoning) are intentionally not surfaced: there is no stable
- * VS Code response part for reasoning content, the same limitation the OpenAI path has for
- * `reasoning_content`.
+ * `thinking_delta` events are reported as thinking parts, like `reasoning_content` on the OpenAI path.
  */
 async function consumeClaudeSse(
 	body: ReadableStream<Uint8Array>,
@@ -295,6 +310,8 @@ async function consumeClaudeSse(
 				const delta = event.delta ?? {};
 				if (delta.type === 'text_delta' && typeof delta.text === 'string' && delta.text.length > 0) {
 					progress.report(new vscode.LanguageModelTextPart(delta.text));
+				} else if (delta.type === 'thinking_delta') {
+					reportThinking(delta.thinking, progress);
 				} else if (delta.type === 'input_json_delta') {
 					const pending = pendingToolBlocks.get(event.index);
 					if (pending) {
