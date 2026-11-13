@@ -1,5 +1,5 @@
 import * as vscode from 'vscode';
-import type { RouterModelCapability } from './routerClient';
+import type { RouterLoadState, RouterModelCapability } from './routerClient';
 
 export interface RouterContentPart {
 	type: 'text' | 'image_url';
@@ -163,6 +163,23 @@ export function buildOpenAiRequestBody(
 }
 
 /**
+ * Load-state tag for the picker's detail text. Only states worth noticing get one: an unloaded
+ * model is the common case, so tagging every row "unloaded" would just be noise.
+ */
+const LOAD_STATE_DETAIL: Record<string, string | undefined> = {
+	loaded: '● loaded',
+	loading: '◌ loading',
+	error: '⚠ error'
+};
+
+const LOAD_STATE_TOOLTIP: Record<RouterLoadState, string> = {
+	loaded: 'Loaded on the router: requests are answered without waiting for the model to load.',
+	loading: 'The router is loading this model now.',
+	unloaded: 'Not loaded: the first request loads it, which may unload another model sharing the GPU.',
+	error: "The router's last attempt to run this model failed. See the router's Servers page."
+};
+
+/**
  * Maps a router model-capabilities entry to what VS Code needs to list it in the model picker.
  *
  * Reasoning effort is deliberately NOT modeled as extra picker entries here (one preset used to
@@ -176,7 +193,8 @@ export function toChatInformation(model: RouterModelCapability): vscode.Language
 	const contextLength = model.context_length > 0 ? model.context_length : 4096;
 	const maxOutputTokens = Math.max(1, Math.min(model.max_output_tokens || contextLength, contextLength - 1));
 	const maxInputTokens = Math.max(1, contextLength - maxOutputTokens);
-	const detailParts = [model.parameter_size, model.quantization];
+	const loadState = model.load_state ?? (model.loaded ? 'loaded' : undefined);
+	const detailParts = [LOAD_STATE_DETAIL[loadState ?? ''], model.parameter_size, model.quantization];
 	if (model.supports_reasoning_effort) {
 		detailParts.push('reasoning');
 	}
@@ -190,6 +208,7 @@ export function toChatInformation(model: RouterModelCapability): vscode.Language
 		maxInputTokens,
 		maxOutputTokens,
 		detail: detail.length > 0 ? detail : undefined,
+		tooltip: loadState ? LOAD_STATE_TOOLTIP[loadState] : undefined,
 		capabilities: {
 			toolCalling: model.tool_calling,
 			imageInput: model.vision
