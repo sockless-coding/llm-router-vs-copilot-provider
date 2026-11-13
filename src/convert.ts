@@ -1,5 +1,6 @@
 import * as vscode from 'vscode';
 import type { RouterLoadState, RouterModelCapability } from './routerClient';
+import { buildReasoningEffortSchema } from './reasoningEffort';
 
 export interface RouterContentPart {
 	type: 'text' | 'image_url';
@@ -126,10 +127,9 @@ export function flattenMessageText(message: vscode.LanguageModelChatRequestMessa
 
 /**
  * Builds the JSON body posted to `/v1/chat/completions` (the router's OpenAI-compatible protocol).
- * `reasoningEffort` — resolved by the caller from the status bar's global effort picker against
- * this model's own `reasoning_effort_options` — is forwarded as `reasoning_effort`, overriding the
- * preset's own `--reasoning-effort` launch default for this request only. Omitted entirely for a
- * model that doesn't support it, so unrelated models are never affected by the global picker.
+ * `reasoningEffort` — the model picker's Thinking Effort choice for this model, already checked
+ * against the model's own `reasoning_effort_options` — is forwarded as `reasoning_effort`,
+ * overriding the preset's `--reasoning-effort` launch default for this request only.
  */
 export function buildOpenAiRequestBody(
 	model: vscode.LanguageModelChatInformation,
@@ -181,23 +181,16 @@ const LOAD_STATE_TOOLTIP: Record<RouterLoadState, string> = {
 
 /**
  * Maps a router model-capabilities entry to what VS Code needs to list it in the model picker.
- *
- * Reasoning effort is deliberately NOT modeled as extra picker entries here (one preset used to
- * become one row per effort level) — VS Code's model picker has no per-model "submenu" UI for
- * BYOK providers the way it does for Copilot's own GPT-5/o-series models, so that just cluttered
- * the picker with near-duplicate rows. Instead a preset that supports it gets one row, tagged
- * "reasoning" in its detail text, and the effort level is chosen globally via the status bar item
- * (see {@link SocklessRouterChatProvider}) and applied per-request in {@link buildOpenAiRequestBody}.
+ * A preset that supports reasoning effort gets a `configurationSchema`, which VS Code renders as a
+ * per-model "Thinking Effort" control next to the model picker (see {@link buildReasoningEffortSchema}) —
+ * unless `offerReasoningEffort` is false, i.e. the current protocol can't forward it.
  */
-export function toChatInformation(model: RouterModelCapability): vscode.LanguageModelChatInformation {
+export function toChatInformation(model: RouterModelCapability, offerReasoningEffort: boolean): vscode.LanguageModelChatInformation {
 	const contextLength = model.context_length > 0 ? model.context_length : 4096;
 	const maxOutputTokens = Math.max(1, Math.min(model.max_output_tokens || contextLength, contextLength - 1));
 	const maxInputTokens = Math.max(1, contextLength - maxOutputTokens);
 	const loadState = model.load_state ?? (model.loaded ? 'loaded' : undefined);
 	const detailParts = [LOAD_STATE_DETAIL[loadState ?? ''], model.parameter_size, model.quantization];
-	if (model.supports_reasoning_effort) {
-		detailParts.push('reasoning');
-	}
 	const detail = detailParts.filter(Boolean).join(' · ');
 
 	return {
@@ -207,6 +200,8 @@ export function toChatInformation(model: RouterModelCapability): vscode.Language
 		version: '1.0.0',
 		maxInputTokens,
 		maxOutputTokens,
+		maxContextWindowTokens: contextLength,
+		configurationSchema: offerReasoningEffort ? buildReasoningEffortSchema(model) : undefined,
 		detail: detail.length > 0 ? detail : undefined,
 		tooltip: loadState ? LOAD_STATE_TOOLTIP[loadState] : undefined,
 		capabilities: {

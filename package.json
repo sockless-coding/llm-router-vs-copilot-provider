@@ -2,7 +2,7 @@
 	"name": "sockless-llm-router-copilot-provider",
 	"displayName": "Sockless LLM Router",
 	"description": "Use models served by your local Sockless LLM Router as Copilot Chat models — point it at the router's API endpoint and models are discovered automatically, with no manual per-model setup.",
-	"version": "0.1.1",
+	"version": "0.2.0",
 	"publisher": "sockless-coding",
 	"private": true,
 	"repository": {
@@ -11,7 +11,7 @@
 	},
 	"icon": "images/icon.png",
 	"engines": {
-		"vscode": "^1.104.0"
+		"vscode": "^1.120.0"
 	},
 	"categories": [
 		"AI",
@@ -38,11 +38,6 @@
 				"command": "socklessLlmRouter.manage",
 				"title": "Configure Connection",
 				"category": "Sockless LLM Router"
-			},
-			{
-				"command": "socklessLlmRouter.setReasoningEffort",
-				"title": "Set Reasoning Effort",
-				"category": "Sockless LLM Router"
 			}
 		],
 		"configuration": {
@@ -61,7 +56,7 @@
 						"Speak the router's Anthropic-compatible protocol (POST /v1/messages)."
 					],
 					"default": "openai",
-					"markdownDescription": "Which of the router's chat protocols this extension uses to send requests. Both protocols expose the same presets and support the same tool calling / image input; switch if you're comparing behavior between the two or want parity with another Claude-protocol client talking to the same router."
+					"markdownDescription": "Which of the router's chat protocols this extension uses to send requests. Both protocols expose the same presets and support the same tool calling / image input; switch if you're comparing behavior between the two or want parity with another Claude-protocol client talking to the same router. The **Thinking Effort** control is only offered with `openai`, since the router doesn't translate effort on `/v1/messages`."
 				}
 			}
 		}
@@ -74,7 +69,7 @@
 	},
 	"devDependencies": {
 		"@types/node": "^22.x",
-		"@types/vscode": "^1.104.0",
+		"@types/vscode": "^1.120.0",
 		"@vscode/vsce": "^3.9.2",
 		"typescript": "^5.9.2"
 	}
