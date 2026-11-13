@@ -15,7 +15,14 @@ export interface RouterModelCapability {
 	reasoning_effort?: string | null;
 	/** Discrete effort levels the chat template gates on, e.g. ["low", "medium", "high"]. */
 	reasoning_effort_options?: string[];
+	/** Whether the preset's model is in memory right now, so a request is answered without a cold load. */
+	loaded?: boolean;
+	/** Finer-grained load state; absent on routers that predate it. */
+	load_state?: RouterLoadState;
 }
+
+/** `loading` = the server is starting with this preset; `unloaded` = a request would load it first. */
+export type RouterLoadState = 'loaded' | 'loading' | 'unloaded' | 'error';
 
 /** An error the router (or the network) surfaced, with a message already fit to show the user. */
 export class RouterApiError extends Error {

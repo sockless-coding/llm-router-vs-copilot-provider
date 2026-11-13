@@ -37,6 +37,10 @@ The chosen level is sent as `reasoning_effort` on `/v1/chat/completions`, but on
 
 This only applies to the `openai` protocol — the router doesn't yet translate a reasoning-effort level onto its `claude`-protocol `/v1/messages` path, so the setting has no effect while **Sockless LLM Router: Protocol** is `claude`.
 
+## Loaded models
+
+The picker's detail text marks presets the router currently has in memory (`● loaded`), is loading (`◌ loading`) or failed to run (`⚠ error`); hover a row for what that means. An untagged model isn't loaded, so its first request waits for the router to load it, which may unload another model on the same GPU. The list refreshes after a request to a model that wasn't loaded. This needs a router version that reports `load_state` on `/v1/models/capabilities`; older routers just show no tags.
+
 ## Protocol
 
 The router speaks two chat protocols side by side, and this extension can use either one — set **Sockless LLM Router: Protocol** (`socklessLlmRouter.protocol`) to:

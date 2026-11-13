@@ -93,11 +93,20 @@ export class SocklessRouterChatProvider implements vscode.LanguageModelChatProvi
 		token: vscode.CancellationToken
 	): Promise<void> {
 		const client = await this.config.createClient();
-		if (this.config.getProtocol() === 'claude') {
-			await client.streamClaudeMessage(buildClaudeRequestBody(model, messages, options), progress, token);
-		} else {
-			const reasoningEffort = this.resolveReasoningEffort(model);
-			await client.streamChatCompletion(buildOpenAiRequestBody(model, messages, options, reasoningEffort), progress, token);
+		const wasLoaded = this.capabilitiesById.get(model.id)?.loaded;
+		try {
+			if (this.config.getProtocol() === 'claude') {
+				await client.streamClaudeMessage(buildClaudeRequestBody(model, messages, options), progress, token);
+			} else {
+				const reasoningEffort = this.resolveReasoningEffort(model);
+				await client.streamChatCompletion(buildOpenAiRequestBody(model, messages, options, reasoningEffort), progress, token);
+			}
+		} finally {
+			// A request for a model that wasn't loaded makes the router load it, possibly evicting
+			// another one, so the picker's load-state tags are stale until it re-queries.
+			if (!wasLoaded) {
+				this.refresh();
+			}
 		}
 	}
 
